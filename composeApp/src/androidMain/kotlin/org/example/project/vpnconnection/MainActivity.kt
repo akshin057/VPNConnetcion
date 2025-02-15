@@ -46,9 +46,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Регистрируем Receiver с фильтром по действию
         val intentFilter = IntentFilter("received_data_from_vpn")
-        registerReceiver(vpnDataReceiver, intentFilter)
+        registerReceiver(vpnDataReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
 
         setContent {
             App()
