@@ -58,7 +58,6 @@ class MyVpnService : VpnService() {
     private lateinit var serverPortNumber: String
     private lateinit var username: String
     private lateinit var password: String
-    private val ACTION_VPN_CONNECTED = "org.example.project.vpnconnection.Service"
     private lateinit var instance: MyVpnService
 
     private val serviceJob = SupervisorJob()
