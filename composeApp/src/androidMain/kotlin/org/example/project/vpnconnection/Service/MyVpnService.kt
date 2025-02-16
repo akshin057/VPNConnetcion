@@ -28,6 +28,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import org.example.project.vpnconnection.Connection.ProtectedSocketFactory
 import java.io.FileInputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -41,6 +42,7 @@ import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.X509TrustManager
@@ -86,6 +88,7 @@ class MyVpnService : VpnService() {
     }
 
     private fun runVpnConnection() {
+
         try {
             if (establishedVpnConnection()) {
                 readFromVpnInterface()
@@ -112,10 +115,14 @@ class MyVpnService : VpnService() {
         if (!::vpnInterface.isInitialized) {
             val builder = Builder()
                 .setSession("MagmaVPN")
-                .addAddress(serverIp, 32)
+                .addAddress("10.0.0.2", 32)  // Локальный IP для VPN
+                .addRoute(serverIp, 32) // Исключаем прокси из маршрутизации через VPN
                 .addRoute("0.0.0.0", 0)
+                .addDnsServer("8.8.8.8")
 
-            val dummyIntent = Intent() // Пустой Intent
+            Log.d(TAG, "$serverIp порт: $serverPortNumber")
+
+            val dummyIntent = Intent()
             val dummyPendingIntent = PendingIntent.getActivity(
                 this,
                 0,
@@ -159,27 +166,27 @@ class MyVpnService : VpnService() {
     }
 
     private fun writeToNetwork(buffer: ByteBuffer, length: Int) {
-        // Преобразуем данные
         val processData = String(buffer.array().copyOf(length))
         try {
             // Создаем объект Proxy с адресом и портом прокси-сервера
             val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(serverIp, serverPortNumber.toInt()))
 
-            // Создаем OkHttpClient с прокси и прокси-аутентификатором
+            // Создаем OkHttpClient с кастомной SocketFactory, прокси и прокси-аутентификатором
             val client = OkHttpClient.Builder()
                 .proxy(proxy)
-                .proxyAuthenticator { route, response ->
+                .socketFactory(ProtectedSocketFactory(this)) // Здесь "this" — это ваш VpnService
+                .proxyAuthenticator { _, response ->
                     response.request.newBuilder()
                         .header("Proxy-Authorization", Credentials.basic(username, password))
                         .build()
                 }
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build()
 
-            // Используем целевой URL, например, для проверки через api.ipify.org
+            // Пример запроса для проверки через api.ipify.org
             val request = Request.Builder()
                 .url("https://api.ipify.org")
-                // Если нужно отправлять данные, можно использовать POST:
-                //.post(processData.toRequestBody("text/plain; charset=utf-8".toMediaType()))
                 .build()
 
             client.newCall(request).execute().use { response ->
