@@ -19,7 +19,6 @@ class AndroidVPNConnector(
         val vpnIntent = VpnService.prepare(context)
 
         if (vpnIntent != null) {
-            // Запускаем Activity для запроса разрешения на VPN
             if (context is Activity) {
                 context.startActivityForResult(vpnIntent, 1)
                 isConnected = true

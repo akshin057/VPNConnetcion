@@ -114,10 +114,11 @@ class MyVpnService : VpnService() {
         if (!::vpnInterface.isInitialized) {
             val builder = Builder()
                 .setSession("MagmaVPN")
-                .addAddress("10.0.0.2", 32)  // Локальный IP для VPN
-                .addRoute(serverIp, 32) // Исключаем прокси из маршрутизации через VPN
+                .addAddress("10.0.0.2", 32)
                 .addRoute("0.0.0.0", 0)
                 .addDnsServer("8.8.8.8")
+                .addDnsServer("1.1.1.1")
+                .addRoute(serverIp, 32)
 
             Log.d(TAG, "$serverIp порт: $serverPortNumber")
 
@@ -130,6 +131,16 @@ class MyVpnService : VpnService() {
             )
 
             vpnInterface = builder.setConfigureIntent(dummyPendingIntent).establish()!!
+
+            val proxySocket = Socket()
+            protect(proxySocket)
+            try {
+                proxySocket.connect(InetSocketAddress(serverIp, serverPortNumber.toInt()))
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка соединения с прокси: ${e.message}")
+            } finally {
+                proxySocket.close()
+            }
 
             Log.d(TAG, "VPN established with routes and DNS servers")
             return true
@@ -166,14 +177,14 @@ class MyVpnService : VpnService() {
 
     private fun writeToNetwork(buffer: ByteBuffer, length: Int) {
         val processData = String(buffer.array().copyOf(length))
-        try {
-            // Создаем объект Proxy с адресом и портом прокси-сервера
-            val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(serverIp, serverPortNumber.toInt()))
 
-            // Создаем OkHttpClient с кастомной SocketFactory, прокси и прокси-аутентификатором
+        try {
+            val proxy =
+                Proxy(Proxy.Type.HTTP, InetSocketAddress(serverIp, serverPortNumber.toInt()))
+
             val client = OkHttpClient.Builder()
                 .proxy(proxy)
-                .socketFactory(ProtectedSocketFactory(this)) // Здесь "this" — это ваш VpnService
+                .socketFactory(ProtectedSocketFactory(this))
                 .proxyAuthenticator { _, response ->
                     response.request.newBuilder()
                         .header("Proxy-Authorization", Credentials.basic(username, password))
@@ -183,7 +194,6 @@ class MyVpnService : VpnService() {
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build()
 
-            // Пример запроса для проверки через api.ipify.org
             val request = Request.Builder()
                 .url("https://api.ipify.org")
                 .build()
@@ -195,6 +205,7 @@ class MyVpnService : VpnService() {
                     Log.d(TAG, "Response: ${response.body?.string()}")
                 }
             }
+
         } catch (e: Exception) {
             Log.e(TAG, "Error sending data via OkHttp: ${e.message}")
         }
